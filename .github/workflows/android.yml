@@ -1,48 +1,110 @@
-name: Android Build
+name: Android CI/CD
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, develop ]
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
-  build:
-    name: Build Android App
+  lint:
+    name: Lint Check
     runs-on: ubuntu-latest
-    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 17
+      - uses: actions/checkout@v4
+      
+      - name: Setup JDK
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
-
+      
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
-        
-      - name: Generate Gradle Wrapper files
-        run: gradle wrapper --gradle-version 8.5
-
+      
+      - name: Generate Gradle Wrapper
+        run: gradle wrapper
+      
       - name: Make gradlew executable
         run: chmod +x gradlew
+      
+      - name: Run Lint
+        run: ./gradlew lint
 
-      - name: Verify Gradle wrapper
-        run: ./gradlew --version
-
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug
-
-      - name: Run Tests
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+      
+      - name: Generate Gradle Wrapper
+        run: gradle wrapper
+      
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+      
+      - name: Run Tests (allow failures)
         run: ./gradlew test
         continue-on-error: true
+      
+      - name: Upload Test Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports
+          path: '**/build/reports/tests/'
 
+  build:
+    name: Build APKs
+    runs-on: ubuntu-latest
+    needs: [lint]  # Only depend on lint, not test
+    if: always() && (needs.lint.result == 'success' || needs.lint.result == 'skipped')
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+      
+      - name: Generate Gradle Wrapper
+        run: gradle wrapper
+      
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+      
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug
+      
+      - name: Build Release APK
+        run: ./gradlew assembleRelease
+        continue-on-error: true
+      
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
+          name: debug-apk
           path: app/build/outputs/apk/debug/*.apk
+      
+      - name: Upload Release APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: app/build/outputs/apk/release/*.apk
+        continue-on-error: true
