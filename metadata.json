@@ -1,0 +1,6 @@
+{
+  "name": "PDF Doc Editor",
+  "description": "Microsoft Word-style rich text document creator, editor and advanced PDF annotator with highlighters, drawings, and custom notes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
