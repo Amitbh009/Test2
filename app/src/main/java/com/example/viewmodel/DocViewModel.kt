@@ -32,6 +32,8 @@ class DocViewModel(private val repository: DocRepository) : ViewModel() {
     private val docContentAdapter = moshi.adapter(DocumentContent::class.java)
     private val pdfAnnotationsAdapter = moshi.adapter(PDFAnnotations::class.java)
 
+    private var saveJob: kotlinx.coroutines.Job? = null
+
     // All documents observed in the UI
     val allDocuments = repository.allDocuments.stateIn(
         scope = viewModelScope,
@@ -263,6 +265,7 @@ class DocViewModel(private val repository: DocRepository) : ViewModel() {
 
     // Load active Document
     fun loadDocument(docId: Int, context: Context?) {
+        saveJob?.cancel() // Cancel any pending save tasks before loading a different file
         viewModelScope.launch {
             _isLoading.value = true
             val doc = repository.getDocumentById(docId)
@@ -295,6 +298,12 @@ class DocViewModel(private val repository: DocRepository) : ViewModel() {
                         _pdfBitmaps.value = PdfUtils.renderPdfToBitmaps(context, doc.pdfBytes)
                     }
                 }
+            } else {
+                _currentDocument.value = null
+                _editTitle.value = ""
+                _wordContent.value = DocumentContent()
+                _pdfAnnotations.value = PDFAnnotations()
+                _pdfBitmaps.value = emptyList()
             }
             _isLoading.value = false
         }
@@ -323,7 +332,7 @@ class DocViewModel(private val repository: DocRepository) : ViewModel() {
         
         _wordContent.value = DocumentContent(blocks)
         _activeBlockId.value = newId
-        saveCurrentDoc()
+        saveCurrentDoc(immediate = true)
     }
 
     fun updateBlockText(blockId: String, text: String) {
@@ -331,7 +340,7 @@ class DocViewModel(private val repository: DocRepository) : ViewModel() {
             if (block.id == blockId) block.copy(text = text) else block
         }
         _wordContent.value = DocumentContent(blocks)
-        saveCurrentDoc()
+        saveCurrentDoc(immediate = false)
     }
 
     fun updateBlockStyles(
@@ -358,7 +367,7 @@ class DocViewModel(private val repository: DocRepository) : ViewModel() {
             }
         }
         _wordContent.value = DocumentContent(blocks)
-        saveCurrentDoc()
+        saveCurrentDoc(immediate = true)
     }
 
     fun removeBlock(blockId: String) {
@@ -370,7 +379,7 @@ class DocViewModel(private val repository: DocRepository) : ViewModel() {
         if (_activeBlockId.value == blockId) {
             _activeBlockId.value = filtered.first().id
         }
-        saveCurrentDoc()
+        saveCurrentDoc(immediate = true)
     }
 
     fun moveBlockUp(blockId: String) {
@@ -381,7 +390,7 @@ class DocViewModel(private val repository: DocRepository) : ViewModel() {
             blocks[index] = blocks[index - 1]
             blocks[index - 1] = temp
             _wordContent.value = DocumentContent(blocks)
-            saveCurrentDoc()
+            saveCurrentDoc(immediate = true)
         }
     }
 
@@ -393,7 +402,7 @@ class DocViewModel(private val repository: DocRepository) : ViewModel() {
             blocks[index] = blocks[index + 1]
             blocks[index + 1] = temp
             _wordContent.value = DocumentContent(blocks)
-            saveCurrentDoc()
+            saveCurrentDoc(immediate = true)
         }
     }
 
@@ -411,7 +420,7 @@ class DocViewModel(private val repository: DocRepository) : ViewModel() {
         }
         
         _pdfAnnotations.value = PDFAnnotations(list)
-        saveCurrentDoc()
+        saveCurrentDoc(immediate = true)
     }
 
     fun addStickyNote(pageIndex: Int, text: String, x: Float, y: Float) {
@@ -434,7 +443,7 @@ class DocViewModel(private val repository: DocRepository) : ViewModel() {
         }
 
         _pdfAnnotations.value = PDFAnnotations(list)
-        saveCurrentDoc()
+        saveCurrentDoc(immediate = true)
     }
 
     fun addHighlight(pageIndex: Int, x1: Float, y1: Float, x2: Float, y2: Float, colorHex: String) {
@@ -456,7 +465,7 @@ class DocViewModel(private val repository: DocRepository) : ViewModel() {
         }
 
         _pdfAnnotations.value = PDFAnnotations(list)
-        saveCurrentDoc()
+        saveCurrentDoc(immediate = true)
     }
 
     fun clearAnnotations(pageIndex: Int) {
@@ -468,13 +477,15 @@ class DocViewModel(private val repository: DocRepository) : ViewModel() {
             }
         }
         _pdfAnnotations.value = PDFAnnotations(list)
-        saveCurrentDoc()
+        saveCurrentDoc(immediate = true)
     }
 
     // Save current active Doc to Room DB
-    fun saveCurrentDoc() {
+    fun saveCurrentDoc(immediate: Boolean = false) {
         val current = _currentDocument.value ?: return
-        viewModelScope.launch {
+        saveJob?.cancel()
+
+        val saveTask = suspend {
             val updatedDoc = if (current.type == "WORD") {
                 val contentJsonStr = docContentAdapter.toJson(_wordContent.value)
                 current.copy(
@@ -492,6 +503,17 @@ class DocViewModel(private val repository: DocRepository) : ViewModel() {
             }
             repository.updateDocument(updatedDoc)
             _currentDocument.value = updatedDoc
+        }
+
+        if (immediate) {
+            viewModelScope.launch {
+                saveTask()
+            }
+        } else {
+            saveJob = viewModelScope.launch {
+                kotlinx.coroutines.delay(800) // 800ms debounce for high frequency actions like typing
+                saveTask()
+            }
         }
     }
 

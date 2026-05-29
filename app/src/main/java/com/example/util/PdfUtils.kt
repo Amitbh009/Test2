@@ -225,13 +225,27 @@ object PdfUtils {
             for (i in 0 until count) {
                 val page = renderer.openPage(i)
                 
-                // Let's create an appropriate-resolution bitmap of the page.
-                // Standard A4 PDF size: 595 x 842. We scale it up (e.g. 2x) for sharp reading.
-                val scale = 2f
-                val width = (page.width * scale).toInt()
-                val height = (page.height * scale).toInt()
-                
-                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                // Keep scaling adaptive to prevent OutOfMemoryError on constrained memory instances
+                var scale = 2f
+                var bitmap: Bitmap? = null
+                while (scale >= 1f && bitmap == null) {
+                    try {
+                        val width = (page.width * scale).toInt()
+                        val height = (page.height * scale).toInt()
+                        bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                    } catch (oom: OutOfMemoryError) {
+                        System.gc()
+                        scale -= 0.5f // Reduce resolution and try again
+                    }
+                }
+
+                if (bitmap == null) {
+                    // Maximum fallback
+                    val width = page.width
+                    val height = page.height
+                    bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                }
+
                 bitmap.eraseColor(Color.WHITE) // Fill with white
                 
                 page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)

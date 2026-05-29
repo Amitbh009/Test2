@@ -19,6 +19,12 @@ import com.example.viewmodel.DocViewModel
 import com.example.viewmodel.DocViewModelFactory
 
 class MainActivity : ComponentActivity() {
+    private val database by lazy { AppDatabase.getDatabase(applicationContext) }
+    private val repository by lazy { DocRepository(database.docDao()) }
+    private val docViewModel by lazy {
+        DocViewModelFactory(repository).create(DocViewModel::class.java)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -29,14 +35,6 @@ class MainActivity : ComponentActivity() {
                     contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0) // Handle edge-to-edge full bleed cleanly
                 ) { innerPadding ->
                     Box(modifier = Modifier.padding(innerPadding)) {
-                        // Initialize AppDatabase, repository and viewmodel using standard factories
-                        val context = LocalContext.current.applicationContext
-                        val database = AppDatabase.getDatabase(context)
-                        val repository = DocRepository(database.docDao())
-                        val docViewModel: DocViewModel = viewModel(
-                            factory = DocViewModelFactory(repository)
-                        )
-
                         AppNavigation(viewModel = docViewModel)
                     }
                 }

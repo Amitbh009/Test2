@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.FormatAlignLeft
 import androidx.compose.material.icons.automirrored.filled.FormatAlignRight
 import androidx.compose.material.icons.automirrored.filled.Help
+import androidx.compose.material.icons.automirrored.filled.StickyNote2
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -71,6 +72,7 @@ import java.util.*
 
 @Composable
 fun AppNavigation(viewModel: DocViewModel) {
+    val context = LocalContext.current
     var currentScreen by remember { mutableStateOf<String>("DASHBOARD") }
     var selectedDocId by remember { mutableStateOf(-1) }
 
@@ -95,20 +97,20 @@ fun AppNavigation(viewModel: DocViewModel) {
                     viewModel = viewModel,
                     onNavigateToDoc = { id, isWord ->
                         selectedDocId = id
-                        viewModel.loadDocument(id, null)
+                        viewModel.loadDocument(id, if (isWord) null else context)
                     }
                 )
                 "WORD_EDITOR" -> WordEditorScreen(
                     viewModel = viewModel,
                     onExit = {
-                        viewModel.saveCurrentDoc()
+                        viewModel.saveCurrentDoc(immediate = true)
                         viewModel.loadDocument(-1, null) // reset
                     }
                 )
                 "PDF_ANNOTATOR" -> PdfAnnotatorScreen(
                     viewModel = viewModel,
                     onExit = {
-                        viewModel.saveCurrentDoc()
+                        viewModel.saveCurrentDoc(immediate = true)
                         viewModel.loadDocument(-1, null) // reset
                     }
                 )
@@ -1027,7 +1029,7 @@ fun PdfAnnotatorScreen(
                     }
                     Button(
                         onClick = {
-                            viewModel.saveCurrentDoc()
+                            viewModel.saveCurrentDoc(immediate = true)
                             val pdfBytes = viewModel.compileAndGetPdfBytes(context)
                             if (pdfBytes != null) {
                                 sharePdfBytes(context, editTitle, pdfBytes)
@@ -1072,7 +1074,7 @@ fun PdfAnnotatorScreen(
                                 "PAN" to Icons.Filled.PanTool,
                                 "DRAW" to Icons.Filled.Draw,
                                 "HIGHLIGHT" to Icons.Filled.BorderColor,
-                                "NOTE" to Icons.Filled.StickyNote2
+                                "NOTE" to Icons.AutoMirrored.Filled.StickyNote2
                             ).forEach { (mode, icon) ->
                                 val selected = editMode == mode
                                 TextButton(
@@ -1300,7 +1302,7 @@ fun PdfPageWithAnnotationCanvas(
                 .aspectRatio(bitmap.width.toFloat() / bitmap.height.toFloat())
                 .onSizeChanged { canvasSize = Size(it.width.toFloat(), it.height.toFloat()) }
                 .pointerInput(editMode, canvasSize) {
-                    if (canvasSize.width <= 0) return@pointerInput
+                    if (canvasSize.width <= 0 || (editMode != "DRAW" && editMode != "HIGHLIGHT")) return@pointerInput
 
                     detectDragGestures(
                         onDragStart = { offset ->
@@ -1352,13 +1354,11 @@ fun PdfPageWithAnnotationCanvas(
                     )
                 }
                 .pointerInput(editMode, canvasSize) {
-                    if (canvasSize.width <= 0) return@pointerInput
+                    if (canvasSize.width <= 0 || editMode != "NOTE") return@pointerInput
                     detectTapGestures { offset ->
-                        if (editMode == "NOTE") {
-                            val rx = offset.x / canvasSize.width
-                            val ry = offset.y / canvasSize.height
-                            onTapForNote(Offset(rx, ry))
-                        }
+                        val rx = offset.x / canvasSize.width
+                        val ry = offset.y / canvasSize.height
+                        onTapForNote(Offset(rx, ry))
                     }
                 }
         ) {
@@ -1435,22 +1435,26 @@ fun PdfPageWithAnnotationCanvas(
 
                 // 2.4 Draw active unsaved brush ink stroke dynamically
                 if (editMode == "DRAW" && activeStrokePoints.size >= 2) {
-                    val strokeColor = Color(android.graphics.Color.parseColor(brushColor))
-                    val path = Path().apply {
-                        moveTo(activeStrokePoints[0].x, activeStrokePoints[0].y)
-                        for (p in 1 until activeStrokePoints.size) {
-                            lineTo(activeStrokePoints[p].x, activeStrokePoints[p].y)
+                    try {
+                        val strokeColor = Color(android.graphics.Color.parseColor(brushColor))
+                        val path = Path().apply {
+                            moveTo(activeStrokePoints[0].x, activeStrokePoints[0].y)
+                            for (p in 1 until activeStrokePoints.size) {
+                                lineTo(activeStrokePoints[p].x, activeStrokePoints[p].y)
+                            }
                         }
-                    }
-                    drawPath(
-                        path = path,
-                        color = strokeColor,
-                        style = Stroke(
-                            width = brushThickness,
-                            cap = StrokeCap.Round,
-                            join = StrokeJoin.Round
+                        drawPath(
+                            path = path,
+                            color = strokeColor,
+                            style = Stroke(
+                                width = brushThickness,
+                                cap = StrokeCap.Round,
+                                join = StrokeJoin.Round
+                            )
                         )
-                    )
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
                 }
             }
 
@@ -1475,7 +1479,7 @@ fun PdfPageWithAnnotationCanvas(
                     ) {
                         Column {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Filled.StickyNote2, contentDescription = null, modifier = Modifier.size(10.dp), tint = Color.Black)
+                                Icon(Icons.AutoMirrored.Filled.StickyNote2, contentDescription = null, modifier = Modifier.size(10.dp), tint = Color.Black)
                                 Spacer(modifier = Modifier.width(2.dp))
                                 Text("Feedback", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                             }
