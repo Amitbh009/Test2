@@ -30,8 +30,6 @@ jobs:
 
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
-      with:
-        gradle-version: 'wrapper' # Automatically uses the checked-in Gradle wrapper we generated
 
     - name: Copy Env Configuration
       # Ensures the Secrets Gradle Plugin has a non-empty .env properties file to satisfy configurations
