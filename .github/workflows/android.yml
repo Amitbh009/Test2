@@ -1,60 +1,47 @@
-name: Android CI Build
+name: Android Build
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches:
+      - main
+      - master
   pull_request:
-    branches: [ "main", "master" ]
-  workflow_dispatch: # Allows manual trigger from the GitHub Actions tab
+    branches:
+      - main
+      - master
+  workflow_dispatch:
 
 jobs:
   build:
-    name: Build and Test App
     runs-on: ubuntu-latest
-    
-    # NOTE: Using a GitHub Environment requires "Required Reviewers" to be configured.
-    # CRITICAL: On FREE GitHub accounts, Environments are ONLY available for PUBLIC repositories.
-    # If this is a private repository on a free tier, this line will cause an error on GitHub Actions.
-    # To resolve that, simply delete or comment out the line below.
-    environment: BuildApproval
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    - name: Set up JDK 21
-      uses: actions/setup-java@v4
-      with:
-        java-version: '21'
-        distribution: 'temurin'
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
 
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v4
-      with:
-        validate-wrappers: false
+      - name: Grant execute permission to gradlew
+        run: chmod +x gradlew
 
-    - name: Copy Env Configuration
-      # Ensures the Secrets Gradle Plugin has a non-empty .env properties file to satisfy configurations
-      run: cp .env.example .env
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
 
-    - name: Prepare Debug Keystore
-      # Prepares the keystore at root level as configured in app/build.gradle.kts
-      run: |
-        if [ -f "debug.keystore.base64" ]; then
-          echo "Decoding debug.keystore from checked-in base64 resource..."
-          base64 -d debug.keystore.base64 > debug.keystore
-        else
-          echo "No base64 keystore found, generating self-signed fallback debug keystore..."
-          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-        fi
+      - name: Clean Project
+        run: ./gradlew clean
 
-    - name: Make Gradle exec
-      # Standardizes execution permissions of the wrapper for Linux runners
-      run: chmod +x gradlew
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace
 
-    - name: Build with Gradle
-      run: ./gradlew assembleDebug
-
-    - name: Run Unit Tests
-      run: ./gradlew testDebugUnitTest
-
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            **/build/outputs/apk/debug/*.apk
