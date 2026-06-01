@@ -1,0 +1,12 @@
+# Prevent line ending conversions on binary files to avoid corruption
+*.jar binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.keystore binary
+
+# Ensure gradlew has correct UNIX line endings and gradlew.bat has Windows line endings
+gradlew text eol=lf
+gradlew.bat text eol=crlf
