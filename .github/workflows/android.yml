@@ -16,11 +16,16 @@ jobs:
     # CRITICAL: On FREE GitHub accounts, Environments are ONLY available for PUBLIC repositories.
     # If this is a private repository on a free tier, this line will cause an error on GitHub Actions.
     # To resolve that, simply delete or comment out the line below.
-    environment: BuildApproval
+    # environment: BuildApproval
 
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
+
+    - name: Download Clean Gradle Wrapper JAR
+      run: |
+        rm -f gradle/wrapper/gradle-wrapper.jar
+        curl -sL "https://raw.githubusercontent.com/gradle/gradle/v8.11.0/gradle/wrapper/gradle-wrapper.jar" -o gradle/wrapper/gradle-wrapper.jar
 
     - name: Set up JDK 21
       uses: actions/setup-java@v4

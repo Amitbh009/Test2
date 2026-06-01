@@ -267,14 +267,7 @@ class DocViewModel(private val repository: DocRepository) : ViewModel() {
     fun loadDocument(docId: Int, context: Context?) {
         saveJob?.cancel() // Cancel any pending save tasks before loading a different file
         
-        // Recycle old page bitmaps instantly to avoid OOM or InputChannel memory exhaustion crashes
-        val oldList = _pdfBitmaps.value
         _pdfBitmaps.value = emptyList()
-        oldList.forEach { bitmap ->
-            if (!bitmap.isRecycled) {
-                bitmap.recycle()
-            }
-        }
 
         viewModelScope.launch {
             _isLoading.value = true
@@ -641,11 +634,7 @@ class DocViewModel(private val repository: DocRepository) : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
-        _pdfBitmaps.value.forEach { bitmap ->
-            if (!bitmap.isRecycled) {
-                bitmap.recycle()
-            }
-        }
+        _pdfBitmaps.value = emptyList()
     }
 }
 

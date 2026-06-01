@@ -1115,7 +1115,7 @@ fun PdfAnnotatorScreen(
 
                         // Help Icon Info
                         IconButton(onClick = {
-                            Toast.makeText(context, "Guide:\n• Pen: Draw Ink lines.\n• Marker: Swipe to highlight.\n• Note: Tap to drop Sticky comments.", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, "Guide:\n• Pen: Draw Ink lines.\n• Marker: Swipe to highlight.\n• Comment: Drop Annotations.\n• Content: Tap/Click area to write or whiteout/rewrite underlying PDF text.", Toast.LENGTH_LONG).show()
                         }) {
                             Icon(Icons.AutoMirrored.Filled.Help, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(20.dp))
                         }
