@@ -396,6 +396,61 @@ object PdfUtils {
                             e.printStackTrace()
                         }
                     }
+
+                    // 4. Draw Editable Text Blocks (Content Editor overlays)
+                    val textBlocksList = pageAnn.textBlocks ?: emptyList()
+                    for (tb in textBlocksList) {
+                        try {
+                            val x = if (tb.x in 0f..1f) tb.x * canvas.width else tb.x
+                            val y = if (tb.y in 0f..1f) tb.y * canvas.height else tb.y
+
+                            val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                                color = try { Color.parseColor(tb.colorHex) } catch (e: Exception) { Color.BLACK }
+                                textSize = tb.fontSize * (canvas.width / 400f)
+                                
+                                val styleFlag = when {
+                                    tb.isBold && tb.isItalic -> Typeface.BOLD_ITALIC
+                                    tb.isBold -> Typeface.BOLD
+                                    tb.isItalic -> Typeface.ITALIC
+                                    else -> Typeface.NORMAL
+                                }
+                                typeface = Typeface.create(Typeface.SANS_SERIF, styleFlag)
+                            }
+
+                            val textPadding = 4f * (canvas.width / 400f)
+                            val blockWidth = canvas.width - x - textPadding * 2
+                            if (blockWidth > 20f) {
+                                val staticLayout = StaticLayout.Builder.obtain(
+                                    tb.text, 0, tb.text.length, textPaint, blockWidth.toInt()
+                                )
+                                .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                                .build()
+
+                                val blockHeight = staticLayout.height + textPadding * 2
+
+                                if (tb.hasWhiteout) {
+                                    val whiteoutPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                                        color = Color.WHITE
+                                        style = Paint.Style.FILL
+                                    }
+                                    canvas.drawRect(
+                                        x - textPadding,
+                                        y - textPadding,
+                                        x + staticLayout.width + textPadding,
+                                        y + blockHeight,
+                                        whiteoutPaint
+                                    )
+                                }
+
+                                canvas.save()
+                                canvas.translate(x, y)
+                                staticLayout.draw(canvas)
+                                canvas.restore()
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
                 }
 
                 // Append page into PdfDocument

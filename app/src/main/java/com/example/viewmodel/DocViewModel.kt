@@ -479,13 +479,104 @@ class DocViewModel(private val repository: DocRepository) : ViewModel() {
     fun clearAnnotations(pageIndex: Int) {
         val list = _pdfAnnotations.value.list.map { pageAnn ->
             if (pageAnn.pageIndex == pageIndex) {
-                pageAnn.copy(strokes = emptyList(), notes = emptyList(), highlights = emptyList())
+                pageAnn.copy(
+                    strokes = emptyList(),
+                    notes = emptyList(),
+                    highlights = emptyList(),
+                    textBlocks = emptyList()
+                )
             } else {
                 pageAnn
             }
         }
         _pdfAnnotations.value = PDFAnnotations(list)
         saveCurrentDoc(immediate = true)
+    }
+
+    fun addPdfTextBlock(
+        pageIndex: Int,
+        text: String,
+        x: Float,
+        y: Float,
+        fontSize: Float = 14f,
+        colorHex: String = "#FF1F1F1F",
+        isBold: Boolean = false,
+        isItalic: Boolean = false,
+        hasWhiteout: Boolean = false
+    ) {
+        val list = _pdfAnnotations.value.list.toMutableList()
+        val pageIdx = list.indexOfFirst { it.pageIndex == pageIndex }
+        
+        val newBlock = com.example.data.model.PdfTextBlock(
+            id = UUID.randomUUID().toString(),
+            text = text,
+            x = x,
+            y = y,
+            fontSize = fontSize,
+            colorHex = colorHex,
+            isBold = isBold,
+            isItalic = isItalic,
+            hasWhiteout = hasWhiteout
+        )
+
+        if (pageIdx >= 0) {
+            val pageAnn = list[pageIdx]
+            val textBlocks = (pageAnn.textBlocks ?: emptyList()).toMutableList().apply { add(newBlock) }
+            list[pageIdx] = pageAnn.copy(textBlocks = textBlocks)
+        } else {
+            list.add(PageAnnotations(pageIndex = pageIndex, textBlocks = listOf(newBlock)))
+        }
+
+        _pdfAnnotations.value = PDFAnnotations(list)
+        saveCurrentDoc(immediate = true)
+    }
+
+    fun updatePdfTextBlock(
+        pageIndex: Int,
+        blockId: String,
+        text: String? = null,
+        fontSize: Float? = null,
+        colorHex: String? = null,
+        isBold: Boolean? = null,
+        isItalic: Boolean? = null,
+        hasWhiteout: Boolean? = null,
+        x: Float? = null,
+        y: Float? = null
+    ) {
+        val list = _pdfAnnotations.value.list.toMutableList()
+        val pageIdx = list.indexOfFirst { it.pageIndex == pageIndex }
+        if (pageIdx >= 0) {
+            val pageAnn = list[pageIdx]
+            val updatedBlocks = (pageAnn.textBlocks ?: emptyList()).map { tb ->
+                if (tb.id == blockId) {
+                    tb.copy(
+                        text = text ?: tb.text,
+                        fontSize = fontSize ?: tb.fontSize,
+                        colorHex = colorHex ?: tb.colorHex,
+                        isBold = isBold ?: tb.isBold,
+                        isItalic = isItalic ?: tb.isItalic,
+                        hasWhiteout = hasWhiteout ?: tb.hasWhiteout,
+                        x = x ?: tb.x,
+                        y = y ?: tb.y
+                    )
+                } else tb
+            }
+            list[pageIdx] = pageAnn.copy(textBlocks = updatedBlocks)
+            _pdfAnnotations.value = PDFAnnotations(list)
+            saveCurrentDoc(immediate = false)
+        }
+    }
+
+    fun removePdfTextBlock(pageIndex: Int, blockId: String) {
+        val list = _pdfAnnotations.value.list.toMutableList()
+        val pageIdx = list.indexOfFirst { it.pageIndex == pageIndex }
+        if (pageIdx >= 0) {
+            val pageAnn = list[pageIdx]
+            val filtered = (pageAnn.textBlocks ?: emptyList()).filter { it.id != blockId }
+            list[pageIdx] = pageAnn.copy(textBlocks = filtered)
+            _pdfAnnotations.value = PDFAnnotations(list)
+            saveCurrentDoc(immediate = true)
+        }
     }
 
     // Save current active Doc to Room DB

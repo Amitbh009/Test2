@@ -48,11 +48,25 @@ data class AreaHighlight(
 )
 
 @JsonClass(generateAdapter = true)
+data class PdfTextBlock(
+    val id: String,
+    val text: String,
+    val x: Float,
+    val y: Float,
+    val fontSize: Float = 14f,
+    val colorHex: String = "#FF1F1F1F",
+    val isBold: Boolean = false,
+    val isItalic: Boolean = false,
+    val hasWhiteout: Boolean = false
+)
+
+@JsonClass(generateAdapter = true)
 data class PageAnnotations(
     val pageIndex: Int,
     val strokes: List<DrawingStroke> = emptyList(),
     val notes: List<StickyNote> = emptyList(),
-    val highlights: List<AreaHighlight> = emptyList()
+    val highlights: List<AreaHighlight> = emptyList(),
+    val textBlocks: List<PdfTextBlock> = emptyList()
 )
 
 @JsonClass(generateAdapter = true)

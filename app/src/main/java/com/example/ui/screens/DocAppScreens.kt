@@ -1002,6 +1002,16 @@ fun PdfAnnotatorScreen(
     var notePageIndex by remember { mutableStateOf(0) }
     var noteTextQuery by remember { mutableStateOf("") }
 
+    var showAddTextDialog by remember { mutableStateOf(false) }
+    var textDialogCoords by remember { mutableStateOf(Offset(0f, 0f)) }
+    var textPageIndex by remember { mutableStateOf(0) }
+    var typedTextQuery by remember { mutableStateOf("") }
+    var typedTextSize by remember { mutableStateOf(14f) }
+    var typedTextColorHex by remember { mutableStateOf("#FF1F1F1F") }
+    var typedBold by remember { mutableStateOf(false) }
+    var typedItalic by remember { mutableStateOf(false) }
+    var typedWhiteout by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -1074,7 +1084,8 @@ fun PdfAnnotatorScreen(
                                 "PAN" to Icons.Filled.PanTool,
                                 "DRAW" to Icons.Filled.Draw,
                                 "HIGHLIGHT" to Icons.Filled.BorderColor,
-                                "NOTE" to Icons.AutoMirrored.Filled.StickyNote2
+                                "NOTE" to Icons.AutoMirrored.Filled.StickyNote2,
+                                "CONTENT" to Icons.Filled.Edit
                             ).forEach { (mode, icon) ->
                                 val selected = editMode == mode
                                 TextButton(
@@ -1083,17 +1094,18 @@ fun PdfAnnotatorScreen(
                                         containerColor = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
                                         contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                                     ),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                                     modifier = Modifier.height(34.dp)
                                 ) {
                                     Icon(icon, contentDescription = mode, modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
                                     Text(
                                         text = when (mode) {
                                             "PAN" -> "Pan"
                                             "DRAW" -> "Pen"
                                             "HIGHLIGHT" -> "Marker"
-                                            else -> "Note"
+                                            "NOTE" -> "Comment"
+                                            else -> "Content"
                                         },
                                         fontSize = 11.sp
                                     )
@@ -1196,6 +1208,7 @@ fun PdfAnnotatorScreen(
                             brushColor = brushColor,
                             brushThickness = brushThickness,
                             annotations = annotations.list.find { it.pageIndex == pageIndex } ?: PageAnnotations(pageIndex),
+                            viewModel = viewModel,
                             onStrokeAdded = { stroke -> viewModel.addStroke(pageIndex, stroke) },
                             onHighlightAdded = { x1, y1, x2, y2 -> viewModel.addHighlight(pageIndex, x1, y1, x2, y2, brushColor.replace("#FF", "#60")) },
                             onTapForNote = { offset ->
@@ -1203,6 +1216,17 @@ fun PdfAnnotatorScreen(
                                 notePageIndex = pageIndex
                                 noteTextQuery = ""
                                 showAddNoteDialog = true
+                            },
+                            onTapForTextBlock = { offset ->
+                                textDialogCoords = offset
+                                textPageIndex = pageIndex
+                                typedTextQuery = ""
+                                typedTextSize = 14f
+                                typedTextColorHex = "#FF1F1F1F"
+                                typedBold = false
+                                typedItalic = false
+                                typedWhiteout = false
+                                showAddTextDialog = true
                             }
                         )
                     }
@@ -1266,6 +1290,107 @@ fun PdfAnnotatorScreen(
             }
         }
     }
+
+    if (showAddTextDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddTextDialog = false },
+            title = { Text("Add Content Layer", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("This text overlays the PDF. Toggle 'Whiteout' to erase original text underneath.", fontSize = 11.sp, color = Color.Gray)
+                    OutlinedTextField(
+                        value = typedTextQuery,
+                        onValueChange = { typedTextQuery = it },
+                        placeholder = { Text("Enter editable text...") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Size: ${typedTextSize.toInt()}sp", modifier = Modifier.weight(1f), fontSize = 12.sp)
+                        Slider(
+                            value = typedTextSize,
+                            onValueChange = { typedTextSize = it },
+                            valueRange = 8f..36f,
+                            modifier = Modifier.weight(2f)
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = typedBold,
+                                onCheckedChange = { typedBold = it }
+                            )
+                            Text("Bold", fontSize = 11.sp)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = typedItalic,
+                                onCheckedChange = { typedItalic = it }
+                            )
+                            Text("Italic", fontSize = 11.sp)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = typedWhiteout,
+                                onCheckedChange = { typedWhiteout = it }
+                            )
+                            Text("Whiteout", fontSize = 11.sp)
+                        }
+                    }
+                    Text("Color", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("#FF1F1F1F", "#FFE53935", "#FF1E88E5", "#FF43A047", "#FF8E24AA").forEach { color ->
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .background(Color(android.graphics.Color.parseColor(color)), CircleShape)
+                                    .border(
+                                        width = if (typedTextColorHex == color) 2.dp else 0.dp,
+                                        color = Color.Black,
+                                        shape = CircleShape
+                                    )
+                                    .clickable { typedTextColorHex = color }
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (typedTextQuery.isNotBlank()) {
+                            viewModel.addPdfTextBlock(
+                                pageIndex = textPageIndex,
+                                text = typedTextQuery,
+                                x = textDialogCoords.x,
+                                y = textDialogCoords.y,
+                                fontSize = typedTextSize,
+                                colorHex = typedTextColorHex,
+                                isBold = typedBold,
+                                isItalic = typedItalic,
+                                hasWhiteout = typedWhiteout
+                            )
+                        }
+                        showAddTextDialog = false
+                    }
+                ) {
+                    Text("Insert Text")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddTextDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -1276,9 +1401,11 @@ fun PdfPageWithAnnotationCanvas(
     brushColor: String,
     brushThickness: Float,
     annotations: PageAnnotations,
+    viewModel: DocViewModel,
     onStrokeAdded: (DrawingStroke) -> Unit,
     onHighlightAdded: (Float, Float, Float, Float) -> Unit,
-    onTapForNote: (Offset) -> Unit
+    onTapForNote: (Offset) -> Unit,
+    onTapForTextBlock: (Offset) -> Unit
 ) {
     var canvasSize by remember { mutableStateOf(Size(0f, 0f)) }
 
@@ -1364,6 +1491,14 @@ fun PdfPageWithAnnotationCanvas(
                         val rx = offset.x / canvasSize.width
                         val ry = offset.y / canvasSize.height
                         onTapForNote(Offset(rx, ry))
+                    }
+                }
+                .pointerInput(editMode, canvasSize) {
+                    if (canvasSize.width <= 0 || editMode != "CONTENT") return@pointerInput
+                    detectTapGestures { offset ->
+                        val rx = offset.x / canvasSize.width
+                        val ry = offset.y / canvasSize.height
+                        onTapForTextBlock(Offset(rx, ry))
                     }
                 }
         ) {
@@ -1486,10 +1621,179 @@ fun PdfPageWithAnnotationCanvas(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.AutoMirrored.Filled.StickyNote2, contentDescription = null, modifier = Modifier.size(10.dp), tint = Color.Black)
                                 Spacer(modifier = Modifier.width(2.dp))
-                                Text("Feedback", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                  Text("Feedback", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                             }
                             Text(note.text, fontSize = 8.sp, color = Color.Black, lineHeight = 9.sp, maxLines = 4)
                         }
+                    }
+                }
+            }
+
+            // 4. Render Editable Text Blocks (Content Editor overlays)
+            (annotations.textBlocks ?: emptyList()).forEach { tb ->
+                val density = androidx.compose.ui.platform.LocalDensity.current
+                val leftSpace = tb.x * canvasSize.width
+                val topSpace = tb.y * canvasSize.height
+
+                if (canvasSize.width > 0) {
+                    var isEditingThisBlock by remember { mutableStateOf(false) }
+                    var editedTextState by remember { mutableStateOf(tb.text) }
+                    var editedFontSize by remember { mutableStateOf(tb.fontSize) }
+                    var editedColorHex by remember { mutableStateOf(tb.colorHex) }
+                    var editedBold by remember { mutableStateOf(tb.isBold) }
+                    var editedItalic by remember { mutableStateOf(tb.isItalic) }
+                    var editedWhiteout by remember { mutableStateOf(tb.hasWhiteout) }
+
+                    Box(
+                        modifier = Modifier
+                            .offset(
+                                x = with(density) { leftSpace.toDp() },
+                                y = with(density) { topSpace.toDp() }
+                            )
+                            .background(
+                                color = if (tb.hasWhiteout) Color.White else Color.Transparent,
+                                shape = RoundedCornerShape(2.dp)
+                            )
+                            .then(
+                                if (editMode == "CONTENT") {
+                                    Modifier
+                                        .border(
+                                            width = 1.dp,
+                                            color = if (isEditingThisBlock) MaterialTheme.colorScheme.primary else Color(0x7F1565C0),
+                                            shape = RoundedCornerShape(2.dp)
+                                        )
+                                        .clickable {
+                                            isEditingThisBlock = true
+                                            editedTextState = tb.text
+                                            editedFontSize = tb.fontSize
+                                            editedColorHex = tb.colorHex
+                                            editedBold = tb.isBold
+                                            editedItalic = tb.isItalic
+                                            editedWhiteout = tb.hasWhiteout
+                                        }
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            .padding(2.dp)
+                    ) {
+                        Text(
+                            text = tb.text,
+                            color = try { Color(android.graphics.Color.parseColor(tb.colorHex)) } catch (e: Exception) { Color.Black },
+                            fontSize = (tb.fontSize * (canvasSize.width / 400f * 0.72f)).sp,
+                            fontWeight = if (tb.isBold) FontWeight.Bold else FontWeight.Normal,
+                            fontStyle = if (tb.isItalic) FontStyle.Italic else FontStyle.Normal,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif,
+                            modifier = Modifier.widthIn(max = with(density) { (canvasSize.width - leftSpace).toDp() })
+                        )
+                    }
+
+                    if (isEditingThisBlock && editMode == "CONTENT") {
+                        AlertDialog(
+                            onDismissRequest = { isEditingThisBlock = false },
+                            title = { Text("Edit Content Layer", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
+                            text = {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedTextField(
+                                        value = editedTextState,
+                                        onValueChange = { editedTextState = it },
+                                        label = { Text("Text Content") },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text("Size: ${editedFontSize.toInt()}sp", modifier = Modifier.weight(1f), fontSize = 12.sp)
+                                        Slider(
+                                            value = editedFontSize,
+                                            onValueChange = { editedFontSize = it },
+                                            valueRange = 8f..36f,
+                                            modifier = Modifier.weight(2f)
+                                        )
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Checkbox(
+                                                checked = editedBold,
+                                                onCheckedChange = { editedBold = it }
+                                            )
+                                            Text("Bold", fontSize = 11.sp)
+                                        }
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Checkbox(
+                                                checked = editedItalic,
+                                                onCheckedChange = { editedItalic = it }
+                                            )
+                                            Text("Italic", fontSize = 11.sp)
+                                        }
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Checkbox(
+                                                checked = editedWhiteout,
+                                                onCheckedChange = { editedWhiteout = it }
+                                            )
+                                            Text("Whiteout", fontSize = 11.sp)
+                                        }
+                                    }
+                                    Text("Text Color", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        listOf("#FF1F1F1F", "#FFE53935", "#FF1E88E5", "#FF43A047", "#FF8E24AA").forEach { color ->
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(24.dp)
+                                                    .background(Color(android.graphics.Color.parseColor(color)), CircleShape)
+                                                    .border(
+                                                        width = if (editedColorHex == color) 2.dp else 0.dp,
+                                                        color = Color.Black,
+                                                        shape = CircleShape
+                                                    )
+                                                    .clickable { editedColorHex = color }
+                                            )
+                                        }
+                                    }
+                                }
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = {
+                                        viewModel.updatePdfTextBlock(
+                                            pageIndex = pageIndex,
+                                            blockId = tb.id,
+                                            text = editedTextState,
+                                            fontSize = editedFontSize,
+                                            colorHex = editedColorHex,
+                                            isBold = editedBold,
+                                            isItalic = editedItalic,
+                                            hasWhiteout = editedWhiteout
+                                        )
+                                        isEditingThisBlock = false
+                                    }
+                                ) {
+                                    Text("Apply")
+                                }
+                            },
+                            dismissButton = {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    TextButton(
+                                        onClick = {
+                                            viewModel.removePdfTextBlock(pageIndex, tb.id)
+                                            isEditingThisBlock = false
+                                        },
+                                        colors = ButtonDefaults.textButtonColors(contentColor = Color.Red)
+                                    ) {
+                                        Text("Delete")
+                                    }
+                                    TextButton(onClick = { isEditingThisBlock = false }) {
+                                        Text("Cancel")
+                                    }
+                                }
+                            }
+                        )
                     }
                 }
             }
