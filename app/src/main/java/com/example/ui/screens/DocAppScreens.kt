@@ -1350,6 +1350,11 @@ fun PdfPageWithAnnotationCanvas(
                                 activeHighlightStart = null
                                 activeHighlightEnd = null
                             }
+                        },
+                        onDragCancel = {
+                            activeStrokePoints.clear()
+                            activeHighlightStart = null
+                            activeHighlightEnd = null
                         }
                     )
                 }

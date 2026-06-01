@@ -214,50 +214,73 @@ object PdfUtils {
     // Renders pages of a stored PDF file (represented as ByteArray) to a list of Bitmap images
     fun renderPdfToBitmaps(context: Context, pdfBytes: ByteArray): List<Bitmap> {
         val bitmaps = mutableListOf<Bitmap>()
+        var tempFile: File? = null
+        var pfd: ParcelFileDescriptor? = null
+        var renderer: PdfRenderer? = null
         try {
-            val tempFile = File.createTempFile("pdf_render_", ".pdf", context.cacheDir)
+            tempFile = File.createTempFile("pdf_render_", ".pdf", context.cacheDir)
             FileOutputStream(tempFile).use { it.write(pdfBytes) }
 
-            val pfd = ParcelFileDescriptor.open(tempFile, ParcelFileDescriptor.MODE_READ_ONLY)
-            val renderer = PdfRenderer(pfd)
+            pfd = ParcelFileDescriptor.open(tempFile, ParcelFileDescriptor.MODE_READ_ONLY)
+            renderer = PdfRenderer(pfd)
             val count = renderer.pageCount
 
             for (i in 0 until count) {
-                val page = renderer.openPage(i)
-                
-                // Keep scaling adaptive to prevent OutOfMemoryError on constrained memory instances
-                var scale = 2f
-                var bitmap: Bitmap? = null
-                while (scale >= 1f && bitmap == null) {
-                    try {
-                        val width = (page.width * scale).toInt()
-                        val height = (page.height * scale).toInt()
+                var page: PdfRenderer.Page? = null
+                try {
+                    page = renderer.openPage(i)
+                    
+                    // Keep scaling adaptive to prevent OutOfMemoryError on constrained memory instances
+                    var scale = 2f
+                    var bitmap: Bitmap? = null
+                    while (scale >= 1f && bitmap == null) {
+                        try {
+                            val width = (page.width * scale).toInt()
+                            val height = (page.height * scale).toInt()
+                            bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                        } catch (oom: OutOfMemoryError) {
+                            System.gc()
+                            scale -= 0.5f // Reduce resolution and try again
+                        }
+                    }
+
+                    if (bitmap == null) {
+                        // Maximum fallback
+                        val width = page.width
+                        val height = page.height
                         bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                    } catch (oom: OutOfMemoryError) {
-                        System.gc()
-                        scale -= 0.5f // Reduce resolution and try again
+                    }
+
+                    bitmap.eraseColor(Color.WHITE) // Fill with white
+                    
+                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                    bitmaps.add(bitmap)
+                } finally {
+                    try {
+                        page?.close()
+                    } catch (e: Exception) {
+                        e.printStackTrace()
                     }
                 }
-
-                if (bitmap == null) {
-                    // Maximum fallback
-                    val width = page.width
-                    val height = page.height
-                    bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                }
-
-                bitmap.eraseColor(Color.WHITE) // Fill with white
-                
-                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                bitmaps.add(bitmap)
-                
-                page.close()
             }
-            renderer.close()
-            pfd.close()
-            tempFile.delete()
         } catch (e: Exception) {
             e.printStackTrace()
+        } finally {
+            try {
+                renderer?.close()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            try {
+                pfd?.close()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            try {
+                tempFile?.delete()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
         return bitmaps
     }

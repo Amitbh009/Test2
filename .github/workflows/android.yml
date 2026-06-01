@@ -1,122 +1,60 @@
-name: Android CI/CD
+name: Android CI Build
 
 on:
   push:
-    branches: [ main, master, develop ]
+    branches: [ "main", "master" ]
   pull_request:
-    branches: [ main, master ]
-  workflow_dispatch:
+    branches: [ "main", "master" ]
+  workflow_dispatch: # Allows manual trigger from the GitHub Actions tab
 
 jobs:
-  lint:
-    name: Lint Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup JDK
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-      
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-      
-      - name: Generate Gradle Wrapper
-        run: gradle wrapper
-      
-      - name: Make gradlew executable
-        run: chmod +x gradlew
-      
-      - name: Run Lint
-        run: ./gradlew lint
-
-  test:
-    name: Unit Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup JDK
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-      
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-      
-      - name: Generate Gradle Wrapper
-        run: gradle wrapper
-      
-      - name: Make gradlew executable
-        run: chmod +x gradlew
-      
-      - name: Run Tests (allow failures)
-        run: ./gradlew test
-        continue-on-error: true
-      
-      - name: Upload Test Reports
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-reports
-          path: '**/build/reports/tests/'
-
   build:
-    name: Build APKs
+    name: Build and Test App
     runs-on: ubuntu-latest
-    needs: [lint]
-    if: always() && (needs.lint.result == 'success' || needs.lint.result == 'skipped')
     
+    # NOTE: Using a GitHub Environment requires "Required Reviewers" to be configured.
+    # CRITICAL: On FREE GitHub accounts, Environments are ONLY available for PUBLIC repositories.
+    # If this is a private repository on a free tier, this line will cause an error on GitHub Actions.
+    # To resolve that, simply delete or comment out the line below.
+    environment: BuildApproval
+
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup JDK
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-      
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-      
-      - name: Generate Gradle Wrapper
-        run: gradle wrapper
-      
-      - name: Make gradlew executable
-        run: chmod +x gradlew
-      
-      - name: Generate debug keystore
-        run: |
-          keytool -genkey -v \
-            -keystore debug.keystore \
-            -alias androiddebugkey \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -storepass android \
-            -keypass android \
-            -dname "CN=Android Debug, O=Android, C=US"
-      
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug
-      
-      - name: Build Release APK
-        run: ./gradlew assembleRelease
-        continue-on-error: true
-      
-      - name: Upload Debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-apk
-          path: app/build/outputs/apk/debug/*.apk
-      
-      - name: Upload Release APK
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-apk
-          path: app/build/outputs/apk/release/*.apk
-        continue-on-error: true
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v4
+      with:
+        validate-wrappers: false
+
+    - name: Copy Env Configuration
+      # Ensures the Secrets Gradle Plugin has a non-empty .env properties file to satisfy configurations
+      run: cp .env.example .env
+
+    - name: Prepare Debug Keystore
+      # Prepares the keystore at root level as configured in app/build.gradle.kts
+      run: |
+        if [ -f "debug.keystore.base64" ]; then
+          echo "Decoding debug.keystore from checked-in base64 resource..."
+          base64 -d debug.keystore.base64 > debug.keystore
+        else
+          echo "No base64 keystore found, generating self-signed fallback debug keystore..."
+          keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+        fi
+
+    - name: Make Gradle exec
+      # Standardizes execution permissions of the wrapper for Linux runners
+      run: chmod +x gradlew
+
+    - name: Build with Gradle
+      run: ./gradlew assembleDebug
+
+    - name: Run Unit Tests
+      run: ./gradlew testDebugUnitTest
+

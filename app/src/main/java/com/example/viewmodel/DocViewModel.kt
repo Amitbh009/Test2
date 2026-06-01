@@ -266,6 +266,16 @@ class DocViewModel(private val repository: DocRepository) : ViewModel() {
     // Load active Document
     fun loadDocument(docId: Int, context: Context?) {
         saveJob?.cancel() // Cancel any pending save tasks before loading a different file
+        
+        // Recycle old page bitmaps instantly to avoid OOM or InputChannel memory exhaustion crashes
+        val oldList = _pdfBitmaps.value
+        _pdfBitmaps.value = emptyList()
+        oldList.forEach { bitmap ->
+            if (!bitmap.isRecycled) {
+                bitmap.recycle()
+            }
+        }
+
         viewModelScope.launch {
             _isLoading.value = true
             val doc = repository.getDocumentById(docId)
@@ -281,7 +291,6 @@ class DocViewModel(private val repository: DocRepository) : ViewModel() {
                     }
                     _wordContent.value = parsed
                     _activeBlockId.value = parsed.blocks.firstOrNull()?.id
-                    _pdfBitmaps.value = emptyList()
                 } else {
                     // PDF Annotation mode
                     val parsed = try {
@@ -303,7 +312,6 @@ class DocViewModel(private val repository: DocRepository) : ViewModel() {
                 _editTitle.value = ""
                 _wordContent.value = DocumentContent()
                 _pdfAnnotations.value = PDFAnnotations()
-                _pdfBitmaps.value = emptyList()
             }
             _isLoading.value = false
         }
@@ -536,6 +544,15 @@ class DocViewModel(private val repository: DocRepository) : ViewModel() {
             repository.deleteDocument(doc)
             if (_currentDocument.value?.id == doc.id) {
                 _currentDocument.value = null
+            }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        _pdfBitmaps.value.forEach { bitmap ->
+            if (!bitmap.isRecycled) {
+                bitmap.recycle()
             }
         }
     }
