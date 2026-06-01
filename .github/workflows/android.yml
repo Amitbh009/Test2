@@ -58,3 +58,9 @@ jobs:
     - name: Run Unit Tests
       run: ./gradlew testDebugUnitTest
 
+    - name: Upload Debug APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-debug-apk-${{ github.run_id }}
+        path: app/build/outputs/apk/debug/*.apk
+        if-no-files-found: error
